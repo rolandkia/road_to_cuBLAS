@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
+#include "gemm_kernels.h"
 
-__global__ void dgemm_kernel(const double* A, const double* B, double* C, int M, int K, int N){
+__global__ void naive_gemm(double* A, double* B, double* C, int M, int K, int N){
 
 	int i = threadIdx.y + blockIdx.y * blockDim.y
 	int j = threadIdx.x + blockIdx.x * blockDim.x
@@ -11,18 +12,17 @@ __global__ void dgemm_kernel(const double* A, const double* B, double* C, int M,
 		for (int k = 0; k<K; k++){
 			tmp += A[i*K +k] * B[k*N+ j]
 		}
-		C[i*K + j] = tmp;
+		C[i*N + j] = tmp;
 	}
 	
 }
 
 
-void dgemm_cuda(const double* d_A, const double* d_B, double* d_C, int M, int K, int N){
+void dgemm_cuda(double* d_A, double* d_B, double* d_C, int M, int K, int N){
     
 	dim3 block(32, 32);
     dim3 grid((N + 32 - 1) / 32,
               (M + 32 - 1) / 32);
 
-    dgemm_kernel<<<grid, block>>>(d_A, d_B, d_C, M, K, N);
+    naive_gemm<<<grid, block>>>(d_A, d_B, d_C, M, K, N);
 }
-

@@ -3,14 +3,14 @@
 
 __global__ void naive_gemm(double* A, double* B, double* C, int M, int K, int N){
 
-	int i = threadIdx.y + blockIdx.y * blockDim.y
-	int j = threadIdx.x + blockIdx.x * blockDim.x
+	int i = threadIdx.y + blockIdx.y * blockDim.y;
+	int j = threadIdx.x + blockIdx.x * blockDim.x;
 
 	if (i < M && j < N){
 
 		double tmp = 0.0;
 		for (int k = 0; k<K; k++){
-			tmp += A[i*K +k] * B[k*N+ j]
+			tmp += A[i*K +k] * B[k*N+ j];
 		}
 		C[i*N + j] = tmp;
 	}

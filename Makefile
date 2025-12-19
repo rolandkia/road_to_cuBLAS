@@ -1,4 +1,6 @@
-NVCC        := nvcc
+CUDA_PATH ?= /usr/local/cuda
+NVCC      := $(CUDA_PATH)/bin/nvcc
+
 NVCC_FLAGS  := -O3 -Xcompiler -Wall --std=c++11
 LIBS        := -lcublas
 

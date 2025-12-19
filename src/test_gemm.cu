@@ -6,10 +6,10 @@
 #include "test.h"
 
 // Fonction de référence sur CPU (Algorithme naïf O(N^3))
-void cpu_gemm_reference(double* A, double* B, double* C, int M, int K, int N) {
+void cpu_gemm_reference(float* A, float* B, float* C, int M, int K, int N) {
     for (int i = 0; i < M; ++i) {
         for (int j = 0; j < N; ++j) {
-            double sum = 0.0;
+            float sum = 0.0;
             for (int l = 0; l < K; ++l) {
                 sum += A[i * K + l] * B[l * N + j];
             }
@@ -18,31 +18,38 @@ void cpu_gemm_reference(double* A, double* B, double* C, int M, int K, int N) {
     }
 }
 
-// Vérification de la différence entre deux matrices
-bool verify_results(double* gpu_res, double* cpu_res, int M, int N) {
-    double epsilon = 1e-8; 
+bool verify_results(float* gpu_res, float* cpu_res, int M, int N) {
+    // Augmente l'epsilon pour le float (1e-3 est plus réaliste pour de grandes matrices)
+    float epsilon = 1e-3f; 
+    
     for (int i = 0; i < M * N; ++i) {
-        if (std::abs(gpu_res[i] - cpu_res[i]) > epsilon) {
-            printf("Erreur d'exactitude à l'index %d : GPU=%f, CPU=%f\n", i, gpu_res[i], cpu_res[i]);
+        float abs_err = std::abs(gpu_res[i] - cpu_res[i]);
+        float rel_err = abs_err / (std::abs(cpu_res[i]) + 1e-9f);
+
+        if (rel_err > epsilon) {
+            printf("Erreur à l'index %d :\n", i);
+            printf("  GPU: %f\n  CPU: %f\n", gpu_res[i], cpu_res[i]);
+            printf("  Erreur relative: %e\n", rel_err);
             return false;
         }
     }
+    printf("Vérification réussie !\n");
     return true;
 }
 
 void run_single_test(int M, int K, int N) {
     printf("Test GEMM [%d x %d x %d] : ", M, K, N);
 
-    size_t size_A = M * K * sizeof(double);
-    size_t size_B = K * N * sizeof(double);
-    size_t size_C = M * N * sizeof(double);
+    size_t size_A = M * K * sizeof(float);
+    size_t size_B = K * N * sizeof(float);
+    size_t size_C = M * N * sizeof(float);
 
-    std::vector<double> h_A(M * K), h_B(K * N), h_C_gpu(M * N), h_C_cpu(M * N);
+    std::vector<float> h_A(M * K), h_B(K * N), h_C_gpu(M * N), h_C_cpu(M * N);
 
-    for (int i = 0; i < M * K; ++i) h_A[i] = (double)rand() / RAND_MAX;
-    for (int i = 0; i < K * N; ++i) h_B[i] = (double)rand() / RAND_MAX;
+    for (int i = 0; i < M * K; ++i) h_A[i] = (float)rand() / RAND_MAX;
+    for (int i = 0; i < K * N; ++i) h_B[i] = (float)rand() / RAND_MAX;
 
-    double *d_A, *d_B, *d_C;
+    float *d_A, *d_B, *d_C;
     cudaMalloc(&d_A, size_A);
     cudaMalloc(&d_B, size_B);
     cudaMalloc(&d_C, size_C);

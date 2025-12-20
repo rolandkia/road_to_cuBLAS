@@ -57,19 +57,21 @@ float perf_dgemm_cublas(float* d_A, float* d_B, float* d_C, int M, int K, int N,
     cublasCreate(&handle);
 
     // Warm-up
-    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C, N);
+    cublas_sgemm(handle, d_A, d_B, d_C, alpha, beta, M, N, K);
     cudaDeviceSynchronize();
 
     cudaEventRecord(start);
     for(int i = 0; i < iterations; i++) {
-        cublasStatus_t status = cublasSgemm(handle, 
-                                            CUBLAS_OP_N, CUBLAS_OP_N, 
-                                            N, M, K, 
-                                            &alpha, 
-                                            d_B, N,  // ldb
-                                            d_A, K,  // lda
-                                            &beta, 
-                                            d_C, N); // ldc
+        // cublasStatus_t status = cublasSgemm(handle, 
+        //                                     CUBLAS_OP_N, CUBLAS_OP_N, 
+        //                                     N, M, K, 
+        //                                     &alpha, 
+        //                                     d_B, N,  // ldb
+        //                                     d_A, K,  // lda
+        //                                     &beta, 
+        //                                     d_C, N); // ldc
+		cublasStatus_t status = cublas_sgemm(handle, d_A, d_B, d_C, alpha, beta, M, N, K);
+
         if (status != CUBLAS_STATUS_SUCCESS) {
             std::cerr << "Erreur cuBLAS !" << std::endl;
             return -1.0f;

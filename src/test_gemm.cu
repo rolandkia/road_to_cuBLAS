@@ -33,18 +33,42 @@ bool verify_results(float* gpu_res, float* cpu_res, int M, int N) {
             return false;
         }
     }
-    printf("Vérification réussie !\n");
     return true;
 }
 
-void run_single_test(int M, int K, int N) {
-    printf("Test GEMM [%d x %d x %d] : ", M, K, N);
+
+
+void print_matrix(float * matrix, int M, int N){
+	printf("\n");
+
+	for (int i = 0; i<M; i++){
+		for (int j = 0; j<N; j++){
+			printf("%f ", matrix[i*N + j]);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
+
+void run_single_test(int M, int K, int N, int cublas) {
+	
+	if (!cublas){
+		printf("Test GEMM [%d x %d x %d] :", M, K, N);
+
+	}
+	else{
+    	printf("Test cuBLAS GEMM [%d x %d x %d] :", M, K, N);
+	}
 
     size_t size_A = M * K * sizeof(float);
     size_t size_B = K * N * sizeof(float);
     size_t size_C = M * N * sizeof(float);
 
-    std::vector<float> h_A(M * K), h_B(K * N), h_C_gpu(M * N), h_C_cpu(M * N);
+	float * h_A = (float *)malloc(size_A);
+	float * h_B = (float *)malloc(size_B);
+	float * h_C_gpu = (float *)malloc(size_C);
+	float * h_C_cpu = (float *)malloc(size_C);
 
     for (int i = 0; i < M * K; ++i) h_A[i] = (float)rand() / RAND_MAX;
     for (int i = 0; i < K * N; ++i) h_B[i] = (float)rand() / RAND_MAX;
@@ -54,35 +78,67 @@ void run_single_test(int M, int K, int N) {
     cudaMalloc(&d_B, size_B);
     cudaMalloc(&d_C, size_C);
 
-    cudaMemcpy(d_A, h_A.data(), size_A, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B.data(), size_B, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_A, h_A, size_A, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size_B, cudaMemcpyHostToDevice);
     cudaMemset(d_C, 0, size_C); 
 
-    dgemm_cuda(d_A, d_B, d_C, M, K, N);
+	if (cublas){
+		const float alpha = 1.0;
+    	const float beta = 0.0;
+		
+		cublasHandle_t handle;
+    	cublasCreate(&handle);
 
-    cudaMemcpy(h_C_gpu.data(), d_C, size_C, cudaMemcpyDeviceToHost);
+		cublas_sgemm(handle, d_A, d_B, d_C, alpha, beta, M, N, K);
 
-    cpu_gemm_reference(h_A.data(), h_B.data(), h_C_cpu.data(), M, K, N);
+	}
+	else{
+		dgemm_cuda(d_A, d_B, d_C, M, K, N);
+	}
 
-    if (verify_results(h_C_gpu.data(), h_C_cpu.data(), M, N)) {
+    cudaMemcpy(h_C_gpu, d_C, size_C, cudaMemcpyDeviceToHost);
+
+    cpu_gemm_reference(h_A, h_B, h_C_cpu, M, K, N);
+
+    if (verify_results(h_C_gpu, h_C_cpu, M, N)) {
         printf("PASS\n");
     } else {
         printf("FAIL\n");
     }
 
-    cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+	if (M < 5 && N < 5){
+		print_matrix(h_C_cpu, M, N);
+		print_matrix(h_C_gpu, M, N);
+	}
+
+	free(h_A);
+	free(h_B);
+	free(h_C_gpu);
+	free(h_C_cpu);
+    cudaFree(d_A); 
+	cudaFree(d_B); 
+	cudaFree(d_C);
 }
 
 void run_unit_tests() {
+
+	run_single_test(4, 4, 4, 0);
+	run_single_test(4, 4, 4, 1);
+
     // Test 1 : Petit cas simple (multiple de la taille des blocs)
-    run_single_test(32, 32, 32);
+    run_single_test(32, 32, 32, 0);
+	run_single_test(32, 32, 32, 1);
+
 
     // Test 2 : Matrices rectangulaires
-    run_single_test(64, 128, 64);
+    run_single_test(64, 128, 64, 0);
+    run_single_test(64, 128, 64, 1);
+
 
     // Test 3 : Tailles impaires (Vérifie si vous gérez bien les bords "out of bounds")
-    run_single_test(33, 33, 33);
-    run_single_test(100, 50, 150);
+    run_single_test(33, 33, 33, 0);
+    run_single_test(100, 50, 150, 0);
 
-    printf("\nTous les tests sont terminés.\n");
+	run_single_test(33, 33, 33, 1);
+    run_single_test(100, 50, 150, 1);
 }

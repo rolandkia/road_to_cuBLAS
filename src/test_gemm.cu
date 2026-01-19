@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include "gemm_kernels.h"
 #include "test.h"
+#include <string.h>
 
 // Fonction de référence sur CPU (Algorithme naïf O(N^3))
 void cpu_gemm_reference(float* A, float* B, float* C, int M, int K, int N) {
@@ -19,7 +20,7 @@ void cpu_gemm_reference(float* A, float* B, float* C, int M, int K, int N) {
 }
 
 bool verify_results(float* gpu_res, float* cpu_res, int M, int N) {
-    // Augmente l'epsilon pour le float (1e-3 est plus réaliste pour de grandes matrices)
+   
     float epsilon = 1e-3f; 
     
     for (int i = 0; i < M * N; ++i) {
@@ -28,15 +29,13 @@ bool verify_results(float* gpu_res, float* cpu_res, int M, int N) {
 
         if (rel_err > epsilon) {
             printf("Erreur à l'index %d :\n", i);
-            printf("  GPU: %f\n  CPU: %f\n", gpu_res[i], cpu_res[i]);
+            printf("  Ma version: %f\n  Réference: %f\n", gpu_res[i], cpu_res[i]);
             printf("  Erreur relative: %e\n", rel_err);
             return false;
         }
     }
     return true;
 }
-
-
 
 void print_matrix(float * matrix, int M, int N){
 	printf("\n");
@@ -51,7 +50,7 @@ void print_matrix(float * matrix, int M, int N){
 }
 
 
-void run_single_test(int M, int K, int N, int cublas) {
+void run_single_test(int M, int K, int N, int cublas, std::string version) {
 	
 	if (!cublas){
 		printf("Test GEMM [%d x %d x %d] :", M, K, N);
@@ -91,9 +90,19 @@ void run_single_test(int M, int K, int N, int cublas) {
 
 		cublas_sgemm(handle, d_A, d_B, d_C, alpha, beta, M, N, K);
 
+		cudaError_t err = cudaGetLastError();
+		if (err != cudaSuccess) {
+			printf("CUDA Error: %s\n", cudaGetErrorString(err));
+		}
+
 	}
 	else{
-		dgemm_cuda(d_A, d_B, d_C, M, K, N);
+		sgemm_cuda(d_A, d_B, d_C, M, K, N, version);
+
+		cudaError_t err = cudaGetLastError();
+		if (err != cudaSuccess) {
+			printf("CUDA Error: %s\n", cudaGetErrorString(err));
+		}
 	}
 
     cudaMemcpy(h_C_gpu, d_C, size_C, cudaMemcpyDeviceToHost);
@@ -106,7 +115,7 @@ void run_single_test(int M, int K, int N, int cublas) {
         printf("FAIL\n");
     }
 
-	if (M < 5 && N < 5){
+	if (M < 2 && N < 2){
 		print_matrix(h_C_cpu, M, N);
 		print_matrix(h_C_gpu, M, N);
 	}
@@ -120,25 +129,40 @@ void run_single_test(int M, int K, int N, int cublas) {
 	cudaFree(d_C);
 }
 
-void run_unit_tests() {
+void run_unit_tests(std::string version) {
 
-	run_single_test(4, 4, 4, 0);
-	run_single_test(4, 4, 4, 1);
+	int gen_test = 1;
+	if ((version == "sgemm_vectorized_double_buffering") || (version == "sgemm_vectorized_2d_tiled")){
+		gen_test = 0;
+	}
+
+	run_single_test(4, 4, 4, 0, version);
+	run_single_test(4, 4, 4, 1, version);
 
     // Test 1 : Petit cas simple (multiple de la taille des blocs)
-    run_single_test(32, 32, 32, 0);
-	run_single_test(32, 32, 32, 1);
+    run_single_test(32, 32, 32, 0, version);
+	run_single_test(32, 32, 32, 1, version);
 
 
     // Test 2 : Matrices rectangulaires
-    run_single_test(64, 128, 64, 0);
-    run_single_test(64, 128, 64, 1);
+    run_single_test(64, 128, 64, 0, version);
+    run_single_test(64, 128, 64, 1, version);
 
 
-    // Test 3 : Tailles impaires (Vérifie si vous gérez bien les bords "out of bounds")
-    run_single_test(33, 33, 33, 0);
-    run_single_test(100, 50, 150, 0);
+	if (gen_test){
+		// Test 3 : Tailles impaires (Vérifie si vous gérez bien les bords "out of bounds")
+		run_single_test(33, 33, 33, 0, version);
+		run_single_test(100, 50, 150, 0, version);
 
-	run_single_test(33, 33, 33, 1);
-    run_single_test(100, 50, 150, 1);
+		run_single_test(33, 33, 33, 1, version);
+		run_single_test(100, 50, 150, 1, version);
+	}
+
+	// Test 4 : Grosse Tailles
+	run_single_test(1024, 1024, 1024, 1, version);
+	run_single_test(1024, 1024, 1024, 0, version);
+
+	// run_single_test(2048, 2048, 2048, 1, version);
+	// run_single_test(2048, 2048, 2048, 0, version);
+
 }

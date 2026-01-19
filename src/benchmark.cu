@@ -4,6 +4,8 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <iomanip>
+#include <string.h>
+#include "test.h"
 
 
 #define CHECK_CUDA(call) { \
@@ -14,23 +16,24 @@
     } \
 }
 
+
 double calculate_gflops(int M, int K, int N, float milliseconds) {
     double ops = 2.0 * (double)M * (double)N * (double)K;
     return (ops * 1e-6) / (double)milliseconds; 
 }
 
-float perf_dgemm(float* d_A, float* d_B, float* d_C, int M, int K, int N, int iterations) {
+float perf_sgemm(float* d_A, float* d_B, float* d_C, int M, int K, int N, int iterations, std::string version) {
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
     // Warm-up
-    dgemm_cuda(d_A, d_B, d_C, M, K, N);
+    sgemm_cuda(d_A, d_B, d_C, M, K, N, version);
     cudaDeviceSynchronize();
 
     cudaEventRecord(start);
     for(int i = 0; i < iterations; i++) {
-        dgemm_cuda(d_A, d_B, d_C, M, K, N);
+        sgemm_cuda(d_A, d_B, d_C, M, K, N, version);
     }
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -44,7 +47,7 @@ float perf_dgemm(float* d_A, float* d_B, float* d_C, int M, int K, int N, int it
 }
 
 
-float perf_dgemm_cublas(float* d_A, float* d_B, float* d_C, int M, int K, int N, int iterations) {
+float perf_sgemm_cublas(float* d_A, float* d_B, float* d_C, int M, int K, int N, int iterations) {
     const float alpha = 1.0;
     const float beta = 0.0;
     
@@ -62,14 +65,7 @@ float perf_dgemm_cublas(float* d_A, float* d_B, float* d_C, int M, int K, int N,
 
     cudaEventRecord(start);
     for(int i = 0; i < iterations; i++) {
-        // cublasStatus_t status = cublasSgemm(handle, 
-        //                                     CUBLAS_OP_N, CUBLAS_OP_N, 
-        //                                     N, M, K, 
-        //                                     &alpha, 
-        //                                     d_B, N,  // ldb
-        //                                     d_A, K,  // lda
-        //                                     &beta, 
-        //                                     d_C, N); // ldc
+ 
 		cublasStatus_t status = cublas_sgemm(handle, d_A, d_B, d_C, alpha, beta, M, N, K);
 
         if (status != CUBLAS_STATUS_SUCCESS) {
@@ -88,45 +84,56 @@ float perf_dgemm_cublas(float* d_A, float* d_B, float* d_C, int M, int K, int N,
     return ms / iterations;
 }
 
-
-void run_performance_benchmark(int M, int K, int N) {
+void run_performance_benchmark(int M, int K, int N, std::string version) {
     int iterations = 10;
 
     printf("\n=== Benchmark GEMM: M=%d, K=%d, N=%d ===\n", M, K, N);
 
-    // 1. Allocation et Initialisation (C++ côté CPU)
     size_t size_A = M * K * sizeof(float);
     size_t size_B = K * N * sizeof(float);
     size_t size_C = M * N * sizeof(float);
 
+	float *h_C = (float *)malloc(size_C);
+	float *h_C_cublas = (float *)malloc(size_C);
+
     float *h_A = (float*)malloc(size_A);
     float *h_B = (float*)malloc(size_B);
-    for(int i = 0; i < M*K; i++) h_A[i] = 1.0; // Remplissage avec des vraies valeurs
-    for(int i = 0; i < K*N; i++) h_B[i] = 0.01;
+    for(int i = 0; i < M*K; i++) h_A[i] = (float)rand() / RAND_MAX;
+    for(int i = 0; i < K*N; i++) h_B[i] = (float)rand() / RAND_MAX;
 
-    // 2. Préparation Device
-    float *d_A, *d_B, *d_C;
+    float *d_A, *d_B, *d_C, *d_C_cublas;
     CHECK_CUDA(cudaMalloc(&d_A, size_A));
     CHECK_CUDA(cudaMalloc(&d_B, size_B));
     CHECK_CUDA(cudaMalloc(&d_C, size_C));
+	CHECK_CUDA(cudaMalloc(&d_C_cublas, size_C));
+
 
     CHECK_CUDA(cudaMemcpy(d_A, h_A, size_A, cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(d_B, h_B, size_B, cudaMemcpyHostToDevice));
 
 
-	float my_perf = perf_dgemm(d_A, d_B, d_C, M, K, N, iterations);
-	float cublas_perf = perf_dgemm_cublas(d_A, d_B, d_C, M, K, N, iterations);
+	float my_perf = perf_sgemm(d_A, d_B, d_C, M, K, N, iterations, version);
+	float cublas_perf = perf_sgemm_cublas(d_A, d_B, d_C_cublas, M, K, N, iterations);
 
+	cudaMemcpy(h_C, d_C, size_C, cudaMemcpyDeviceToHost);
+	cudaMemcpy(h_C_cublas, d_C_cublas, size_C, cudaMemcpyDeviceToHost);
+
+	bool res = verify_results(h_C, h_C_cublas, M, N);
+	
     double my_gflops = calculate_gflops(M, K, N, my_perf);
     double cublas_gflops = calculate_gflops(M, K, N, cublas_perf);
 
     std::cout << std::fixed << std::setprecision(3);
-    std::cout << ">>> Votre Kernel : " << my_perf << " ms | " << my_gflops << " GFLOPS" << std::endl;
-    std::cout << ">>> cuBLAS       : " << cublas_perf << " ms | " << cublas_gflops << " GFLOPS" << std::endl;
-    std::cout << ">>> Efficacité   : " << (my_gflops / cublas_gflops) * 100.0 << "% de cuBLAS" << std::endl;
+    std::cout << ">>> Kernel (" << version << ") : " << my_perf << " ms | " << my_gflops << " GFLOPS" << std::endl;
+    std::cout << ">>> cuBLAS   : " << cublas_perf << " ms | " << cublas_gflops << " GFLOPS" << std::endl;
+    std::cout << ">>> Efficacité   : " << (my_gflops / cublas_gflops) * 100.0 << "% of cuBLAS" << std::endl;
+	std::cout << ">>> Check Result   : " << (res ? "PASS" : "FAIL") << std::endl;
 
-    // // Nettoyage
-    free(h_A); free(h_B);
-    cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+    free(h_A); 
+	free(h_B);
+    cudaFree(d_A); 
+	cudaFree(d_B); 
+	cudaFree(d_C);
+	cudaFree(d_C_cublas);
 
 }

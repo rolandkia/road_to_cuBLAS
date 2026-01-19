@@ -1,6 +1,10 @@
 #ifndef TEST_H
 #define TEST_H
 
-void run_unit_tests();
+#include <string>
+
+bool verify_results(float* test, float* reference, int M, int N);
+
+void run_unit_tests(std::string version);
 
 #endif

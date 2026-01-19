@@ -6,6 +6,12 @@ This project implements and benchmarks various optimization techniques for SGEMM
 
 The primary objective is to demonstrate how memory hierarchy management, data tiling, and instruction-level parallelism can drastically improve throughput in compute-bound kernels.
 
+## Performance Results
+Below is the benchmark comparison between my custom kernels and cuBLAS for matrix sizes ranging from 256 to 4096. Our most optimized kernel, **Double Buffering**, reaches 84% of cuBLAS performance on large matrices
+
+![SGEMM Performance Graph](assets/sgemm_performance.png)
+
+
 ## Optimization Journey
 
 Each kernel in this suite represents a specific optimization technique:

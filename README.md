@@ -35,10 +35,10 @@ Run the tool by specifying the kernel method and the matrix size (N×N):
 ```bash
 ./gemm_tool -m <method> -s <size> [-t]
 ```
--
+
 
 ### Options:
-- `-m <method>` : Specifies the GPU kernel to benchmark. Choose from the available methods listed above (e.g., `sgemm_vectorized_double_buffering`).
+- `-m <method>` : Specifies the GPU kernel to benchmark. Choose from the available methods listed below (e.g., `sgemm_vectorized_double_buffering`).
 - `-s <size>` : Sets the dimension N for the square matrices (N×N). Defaults to **2048**. Note: GPU results are automatically verified against cuBLAS.
 - `-t` : Enables **Unit Testing**. Compares the GPU output against a CPU reference implementation to ensure mathematical correctness.
 
